@@ -10,8 +10,7 @@ from streamlit_extras.stylable_container import stylable_container
 
 import sys
 sys.path.append('../')
-import cp_reach as cp
-import cp_reach.rover.simple_turn as cpr
+from cp_reach.rover import simple_turn
 
 st.set_page_config(page_title="Rover", page_icon="🚗", layout="wide")
 
@@ -190,7 +189,7 @@ with col2:
 
     def plot_rover_and_points(config):
         fig1, ax1 = plt.subplots(figsize=(6, 6))
-        cp.rover.simple_turn.emi_disturbance(config, ax1)
+        simple_turn.emi_disturbance(config, ax1)
 
         if st.session_state.csv_files:
             for i, file_data in enumerate(st.session_state.csv_files):
@@ -211,7 +210,7 @@ with col2:
         st.pyplot(fig1)
 
         fig2, ax2 = plt.subplots(figsize=(6, 6))
-        cp.rover.simple_turn.roll_over(config, ax2)
+        simple_turn.roll_over(config, ax2)
         st.pyplot(fig2)
 
         img_bytes1 = BytesIO()

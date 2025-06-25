@@ -9,7 +9,7 @@ import pandas as pd
 import sys
 sys.path.append('../')
 import cp_reach as cp
-import cp_reach.quadrotor.log_linearized as qr
+# import cp_reach.quadrotor.log_linearized as qr
 
 st.set_page_config(page_title="Quadrotor", page_icon="🚁", layout="wide")
 st.markdown("<h1 style='text-align: center;'>Quadrotor</h1>", unsafe_allow_html=True)
