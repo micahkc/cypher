@@ -28,13 +28,14 @@ class Model:
         # ============================================
         # Declare u
 
-        u = dae.add('u', 'input', dict(start = 0.0))
+        thr = dae.add('thr', 'input', dict(start = 0.0))
+        str = dae.add('str', 'input', dict(start = 0.0))
         # ============================================
         # Declare p
 
-        k = dae.add('k', 'parameter', 'tunable', dict(start = 1.0))
-        c = dae.add('c', 'parameter', 'tunable', dict(start = 1.0))
-        m = dae.add('m', 'parameter', 'tunable', dict(start = 1.0))
+        l = dae.add('l', 'parameter', 'tunable', dict(start = 1.0))
+        r = dae.add('r', 'parameter', 'tunable', dict(start = 0.1))
+        m1_tau = dae.add('m1_tau', 'parameter', 'tunable', dict(start = 1.0))
         # ============================================
         # Declare c# ============================================
         # Declare cp
@@ -42,14 +43,19 @@ class Model:
         # ============================================
         # Declare x
 
+        m1_omega = dae.add('m1_omega', dict(start = 0.0))
         x = dae.add('x', dict(start = 0.0))
-        v = dae.add('v', dict(start = 0.0))
+        y = dae.add('y', dict(start = 0.0))
+        theta = dae.add('theta', dict(start = 0.0))
         # ============================================
         # Declare m
 
+        a = dae.add('a', dict(start = 0.0))
         # ============================================
         # Declare y
 
+        v = dae.add('v', dict(start = 0.0))
+        m1_omega_ref = dae.add('m1_omega_ref', dict(start = 0.0))
         # ============================================
         # Declare z
 
@@ -58,10 +64,13 @@ class Model:
 
         # ============================================
         # Declare pre_x
+        pre_m1_omega = dae.pre(m1_omega)
         pre_x = dae.pre(x)
-        pre_v = dae.pre(v)
+        pre_y = dae.pre(y)
+        pre_theta = dae.pre(theta)
         # ============================================
         # Declare pre_m
+        pre_a = dae.pre(a)
         # ============================================
         # Declare pre_z
         # ============================================
@@ -72,8 +81,10 @@ class Model:
         # Define reset functions: fr
         # ============================================
         # Declare x_dot
+        der_m1_omega = dae.der(m1_omega)
         der_x = dae.der(x)
-        der_v = dae.der(v)
+        der_y = dae.der(y)
+        der_theta = dae.der(theta)
         # ============================================
         def if_else_builder(s, builder, terminal_state):
             state = terminal_state
@@ -95,8 +106,13 @@ class Model:
                 
             return dictionary
         # Define Continous Update Function: fx
-        dae.eq(der_x, v)
-        dae.eq(der_v, ((-(((k / m) * x)) - ((c / m) * v)) - ((1.0 / m) * u)))
+        dae.eq(v, (r * m1_omega))
+        dae.eq(der_x, (v * cos(theta)))
+        dae.eq(der_y, (v * sin(theta)))
+        dae.eq(der_theta, ((v / l) * tan(str)))
+        dae.eq(m1_omega_ref, thr)
+        dae.eq(a, 1.0)
+        dae.eq(der_m1_omega, ((1.0 / m1_tau) * (m1_omega_ref - m1_omega)))
         
 
 

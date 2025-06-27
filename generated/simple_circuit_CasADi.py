@@ -28,13 +28,13 @@ class Model:
         # ============================================
         # Declare u
 
-        u = dae.add('u', 'input', dict(start = 0.0))
+        wheelSpeed = dae.add('wheelSpeed', 'input', dict(start = 0.0))
+        servoAngle = dae.add('servoAngle', 'input', dict(start = 0.0))
         # ============================================
         # Declare p
 
-        k = dae.add('k', 'parameter', 'tunable', dict(start = 1.0))
-        c = dae.add('c', 'parameter', 'tunable', dict(start = 1.0))
-        m = dae.add('m', 'parameter', 'tunable', dict(start = 1.0))
+        wheelDiameter = dae.add('wheelDiameter', 'parameter', 'tunable', dict(start = 2.5))
+        wheelBase = dae.add('wheelBase', 'parameter', 'tunable', dict(start = 2.5))
         # ============================================
         # Declare c# ============================================
         # Declare cp
@@ -43,13 +43,17 @@ class Model:
         # Declare x
 
         x = dae.add('x', dict(start = 0.0))
-        v = dae.add('v', dict(start = 0.0))
+        y = dae.add('y', dict(start = 0.0))
+        heading = dae.add('heading', dict(start = 0.0))
         # ============================================
         # Declare m
 
         # ============================================
         # Declare y
 
+        vx = dae.add('vx', dict(start = 0.0))
+        vy = dae.add('vy', dict(start = 0.0))
+        v = dae.add('v', dict(start = 0.0))
         # ============================================
         # Declare z
 
@@ -59,7 +63,8 @@ class Model:
         # ============================================
         # Declare pre_x
         pre_x = dae.pre(x)
-        pre_v = dae.pre(v)
+        pre_y = dae.pre(y)
+        pre_heading = dae.pre(heading)
         # ============================================
         # Declare pre_m
         # ============================================
@@ -73,7 +78,8 @@ class Model:
         # ============================================
         # Declare x_dot
         der_x = dae.der(x)
-        der_v = dae.der(v)
+        der_y = dae.der(y)
+        der_heading = dae.der(heading)
         # ============================================
         def if_else_builder(s, builder, terminal_state):
             state = terminal_state
@@ -95,8 +101,12 @@ class Model:
                 
             return dictionary
         # Define Continous Update Function: fx
-        dae.eq(der_x, v)
-        dae.eq(der_v, ((-(((k / m) * x)) - ((c / m) * v)) - ((1.0 / m) * u)))
+        dae.eq(v, ((wheelSpeed * wheelDiameter) / 2.0))
+        dae.eq(vx, (v * cos(heading)))
+        dae.eq(vy, (v * sin(heading)))
+        dae.eq(der_x, vx)
+        dae.eq(der_y, vy)
+        dae.eq(der_heading, ((v * tan(servoAngle)) / wheelBase))
         
 
 

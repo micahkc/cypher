@@ -1,4 +1,5 @@
 import streamlit as st
+from streamlit_ace import st_ace
 import subprocess
 from pathlib import Path
 import importlib.util
@@ -6,7 +7,9 @@ import sys
 import matplotlib.pyplot as plt
 import numpy as np
 import io
-import os
+# import os
+import traceback
+
 
 st.set_page_config(layout="wide")
 st.title("Rumoca")
@@ -14,13 +17,25 @@ st.title("Rumoca")
 generated_dir = Path("generated")
 generated_dir.mkdir(exist_ok=True)
 
+# CSS
+st.markdown("""
+    <style>
+    section > div:nth-child(3) [data-testid="stExpander"] {
+        background-color: #e6f2ff; /* Import = light blue */
+    }
+    section > div:nth-child(4) [data-testid="stExpander"] {
+        background-color: #fff4e6; /* Export = light orange */
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+
+
+
 # Initialize session state keys if missing
 for key in ["modelica_path", "generated_path", "export_format", "generated_code", "modelica_code"]:
     if key not in st.session_state:
         st.session_state[key] = None
-
-# File uploader
-uploaded_file = st.file_uploader("Upload a Modelica (.mo) file", type=["mo"])
 
 # Export format options
 export_formats = {
@@ -29,31 +44,47 @@ export_formats = {
     "JSON": "json"
 }
 
-selected_format = None
-col1, col2, col3 = st.columns(3)
+# File uploader
+with st.expander("Modelica Model", expanded=True):
+    uploaded_file = st.file_uploader("Upload a Modelica (.mo) file", type=["mo"])
+
+    if uploaded_file:
+        modelica_path = generated_dir / uploaded_file.name
+        original_code = uploaded_file.read().decode("utf-8")
+
+        if "last_uploaded_name" not in st.session_state:
+            st.session_state.last_uploaded_name = None
+
+        # If a new file is uploaded, reset the editor and path
+        if uploaded_file.name != st.session_state.last_uploaded_name:
+            st.session_state.modelica_code = original_code
+            st.session_state.last_uploaded_name = uploaded_file.name
+            st.session_state.modelica_path = modelica_path
+            modelica_path.write_text(original_code)
+
+        edited_code = st_ace(
+            value=st.session_state.modelica_code,
+            language= "c_cpp", #"modelica",
+            theme="github",
+            key=f"modelica_editor_{uploaded_file.name}",
+            height=400,
+            show_gutter=True,
+            show_print_margin=False,
+            wrap=True
+        )
+
+        if edited_code != st.session_state.modelica_code:
+            modelica_path.write_text(edited_code)
+            st.session_state.modelica_code = edited_code
+
+
+
+
+col1, col2 = st.columns([3, 1])
 with col1:
-    if st.button("Export to SymPy"):
-        selected_format = "SymPy"
-with col2:
-    if st.button("Export to CasADi"):
-        selected_format = "CasADi"
-with col3:
-    if st.button("Export to JSON"):
-        selected_format = "JSON"
-
-# When file is uploaded, display editable Modelica code
-if uploaded_file:
-    modelica_path = generated_dir / uploaded_file.name
-    original_code = uploaded_file.read().decode("utf-8")
-
-    # Save and store
-    st.session_state.modelica_path = modelica_path
-    st.session_state.modelica_code = original_code
-
-    with st.expander("View/Edit Modelica Code", expanded=True):
-        edited_code = st.text_area("Modelica File Contents", original_code, height=400, key="modelica_editor")
-        modelica_path.write_text(edited_code)
-        st.session_state.modelica_code = edited_code
+    selected_format = st.selectbox("Select Export Format", options=list(export_formats.keys()))
+# with col2:
+#     generate_clicked = st.button("Generate")
 
 # Export and code generation
 if st.session_state.modelica_path and selected_format:
@@ -77,24 +108,40 @@ if st.session_state.modelica_path and selected_format:
         st.session_state.generated_code = result.stdout
         st.session_state.export_format = selected_format
 
-        st.success(f"{selected_format} export successful!")
+        # st.success(f"{selected_format} export successful!")
 
     except subprocess.CalledProcessError as e:
-        st.error(f"Export failed:\n{e.stderr}")
+        st.error("Export failed:")
+        st.code(f"Command: {' '.join(cmd)}\n\nSTDOUT:\n{e.stdout}\n\nSTDERR:\n{e.stderr}", language="bash")
 
 # Show generated code
 if st.session_state.generated_code:
-    with st.expander("View/Edit Generated Code", expanded=False):
-        updated_code = st.text_area("Generated Python Code", st.session_state.generated_code, height=400, key="generated_editor")
-        Path(st.session_state.generated_path).write_text(updated_code)
-        st.session_state.generated_code = updated_code
 
-    st.download_button(
-        label=f"Download {st.session_state.export_format} Output",
-        data=Path(st.session_state.generated_path).read_bytes(),
-        file_name=Path(st.session_state.generated_path).name,
-        mime="text/plain"
-    )
+
+    with st.expander(f"Generated {st.session_state.export_format} Code", expanded=False):
+        updated_code = st_ace(
+            value=st.session_state.generated_code,  # This must be correct session state
+            language="python",
+            theme="monokai",
+            key=f"generated_editor_{st.session_state.modelica_path.stem}_{st.session_state.export_format}",
+            height=400,
+            show_gutter=True,
+            show_print_margin=False,
+            wrap=True
+        )
+
+        # Only update if something actually changed
+        if updated_code != st.session_state.generated_code:
+            Path(st.session_state.generated_path).write_text(updated_code)
+            st.session_state.generated_code = updated_code
+
+            
+        st.download_button(
+            label=f"Download {st.session_state.export_format} Output",
+            data=Path(st.session_state.generated_path).read_bytes(),
+            file_name=Path(st.session_state.generated_path).name,
+            mime="text/plain"
+        )
 
 # Simulation section (only for CasADi export)
 if st.session_state.generated_path and st.session_state.export_format == "CasADi":

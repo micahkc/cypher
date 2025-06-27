@@ -28,13 +28,9 @@ class Model:
         # ============================================
         # Declare u
 
-        u = dae.add('u', 'input', dict(start = 0.0))
         # ============================================
         # Declare p
 
-        k = dae.add('k', 'parameter', 'tunable', dict(start = 1.0))
-        c = dae.add('c', 'parameter', 'tunable', dict(start = 1.0))
-        m = dae.add('m', 'parameter', 'tunable', dict(start = 1.0))
         # ============================================
         # Declare c# ============================================
         # Declare cp
@@ -43,7 +39,6 @@ class Model:
         # Declare x
 
         x = dae.add('x', dict(start = 0.0))
-        v = dae.add('v', dict(start = 0.0))
         # ============================================
         # Declare m
 
@@ -59,7 +54,6 @@ class Model:
         # ============================================
         # Declare pre_x
         pre_x = dae.pre(x)
-        pre_v = dae.pre(v)
         # ============================================
         # Declare pre_m
         # ============================================
@@ -73,7 +67,6 @@ class Model:
         # ============================================
         # Declare x_dot
         der_x = dae.der(x)
-        der_v = dae.der(v)
         # ============================================
         def if_else_builder(s, builder, terminal_state):
             state = terminal_state
@@ -95,8 +88,7 @@ class Model:
                 
             return dictionary
         # Define Continous Update Function: fx
-        dae.eq(der_x, v)
-        dae.eq(der_v, ((-(((k / m) * x)) - ((c / m) * v)) - ((1.0 / m) * u)))
+        dae.eq(der_x, 1.0)
         
 
 

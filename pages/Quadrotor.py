@@ -139,9 +139,19 @@ with col2:
 
         # Create Plot 2: Roll Over Analysis
         fig2, ax2 = plt.subplots(figsize=(6, 6))
-        inv_points, mu_total, points, points_theta, ebeta, omegabound, sol_LMI = cp.quadrotor.log_linearized.disturbance(config, ref)
-        cp.quadrotor.log_linearized.plot2DInvSet(points, inv_points, ax2)
+        # inv_points, mu_total, points, points_theta, ebeta, omegabound, sol_LMI = cp.quadrotor.log_linearized.disturbance(config, ref)
+        inv_points, points_algebra, lower_bound, upper_bound, sol, omega_bound = cp.quadrotor.log_linearized.disturbance(config, ref)
+        # cp.quadrotor.log_linearized.plot2DInvSet(points, inv_points, ax2)
+        flowpipes_list, nominal_traj = cp.flowpipe.flowpipe.flowpipes(
+            ref=ref,             # your dict with keys 'x', 'y', 'z'
+            step=1,                # number of segments
+            w1=config['thrust_disturbance'],              # linear disturbance (scalar or vector)
+            omegabound = omega_bound,     # angular disturbance (scalar or vector)
+            sol=sol,             # output of SE23LMIs
+            axis='xy'            # 'xy' or 'xz'
+        )
 
+        cp.flowpipe.flowpipe.plot_flowpipes(nominal_traj, flowpipes_list, ax2, axis='xy')
 
         img_bytes2 = BytesIO()
         fig2.savefig(img_bytes2, format='png')
