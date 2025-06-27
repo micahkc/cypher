@@ -42,7 +42,7 @@ class Model:
         # ============================================
         # Declare x
 
-        x = dae.add('x', dict(start = 0.0))
+        x = dae.add('x', dict(start = 2.0))
         v = dae.add('v', dict(start = 0.0))
         # ============================================
         # Declare m

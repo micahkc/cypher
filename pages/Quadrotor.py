@@ -1,179 +1,243 @@
 import streamlit as st
-import json
-import matplotlib.pyplot as plt
 import numpy as np
+import matplotlib.pyplot as plt
 from io import BytesIO
-from streamlit_extras.stylable_container import stylable_container
-import pandas as pd
-# from mpl_toolkits.mplot3d import Axes3D
 import sys
-sys.path.append('../')
-import cp_reach as cp
-# import cp_reach.quadrotor.log_linearized as qr
+sys.path.append("../")
+from cp_reach.sim.multirotor_plan import planner2, find_cost_function
+from cp_reach.flowpipe.flowpipe import flowpipes, plot_flowpipes
+from cp_reach.quadrotor import log_linearized
 
-st.set_page_config(page_title="Quadrotor", page_icon="🚁", layout="wide")
-st.markdown("<h1 style='text-align: center;'>Quadrotor</h1>", unsafe_allow_html=True)
+st.set_page_config(page_title="Trajectory & Flowpipe Planner", layout="wide")
+st.title("Interactive Trajectory + Flowpipe Generator")
 
-# Default values for Quadrotor
-default_data = {
-    "thrust_disturbance": 2.0,
-    "gyro_disturbance": 2.4
-}
+# Constants
+poly_deg = 7
+min_deriv = 4
+bc_deriv = 4
+k_time = 1e5
 
-# Initialize session state for configuration if not already
-if "quadrotor_config" not in st.session_state:
-    st.session_state.quadrotor_config = default_data.copy()
+# Initialize session state
+if "waypoints" not in st.session_state:
+    st.session_state.waypoints = [
+        {"pos": [0.0, 0.0, 0.0], "vel": [0.0, 0.0, 0.0]},
+        {"pos": [5.0, 5.0, 0.0], "vel": [0.0, 0.0, 0.0]},
+    ]
+if "T_legs" not in st.session_state:
+    st.session_state.T_legs = [5.0]
+if "ref_traj" not in st.session_state:
+    st.session_state.ref_traj = None
 
-# Create columns for layout
-col1, col2 = st.columns([1,2])
+# === Waypoint Editor ===
 
-# Configure quadrotor Parameters and File Uploader in the first column
-with col1:
-    st.markdown("### Upload Quadrotor Configuration File (JSON)")
-    uploaded_file = st.file_uploader("Choose a JSON file", type=["json"])
-
-    # If the file is uploaded, update the configuration
-    if uploaded_file is not None:
-        try:
-            file_contents = uploaded_file.read().decode("utf-8")
-            loaded_json = json.loads(file_contents)
-            # Update session state with the uploaded config
-            st.session_state.quadrotor_config.update(loaded_json)
-            st.success("JSON file uploaded successfully!")
-        except Exception as e:
-            st.error(f"Failed to read JSON file: {e}")
-
-    # Retrieve the config from session state
-    config = st.session_state.quadrotor_config
+# Always enforce T_legs = len(waypoints) - 1
+while len(st.session_state.T_legs) < len(st.session_state.waypoints) - 1:
+    st.session_state.T_legs.append(5.0)
+while len(st.session_state.T_legs) > len(st.session_state.waypoints) - 1:
+    st.session_state.T_legs.pop()
 
 
-   
+st.subheader("Waypoints")
+cols = st.columns([1, 1, 1, 1, 1, 1, 1])
+cols[0].markdown("**#**")
+cols[1].markdown("**X**")
+cols[2].markdown("**Y**")
+cols[3].markdown("**Z**")
+cols[4].markdown("**Vx**")
+cols[5].markdown("**Vy**")
+cols[6].markdown("**Vz**")
+
+for i, wp in enumerate(st.session_state.waypoints):
+    cols = st.columns([1, 1, 1, 1, 1, 1, 1])
+    cols[0].write(f"{i}")
+    for j, key in enumerate(["pos", "vel"]):
+        for k in range(3):
+            idx = 1 + j * 3 + k
+            wp[key][k] = cols[idx].number_input(
+                f"{key}_{k}_{i}", value=wp[key][k], step=0.1, label_visibility="collapsed"
+            )
+
+col_a, col_b = st.columns([1, 1])
+if col_a.button("➕ Add Waypoint"):
+    st.session_state.waypoints.append({"pos": [0.0, 0.0, 0.0], "vel": [0.0, 0.0, 0.0]})
+    st.rerun()  # force Streamlit to display the new state immediately
+
+if col_b.button("➖ Remove Last", disabled=len(st.session_state.waypoints) <= 2):
+    st.session_state.waypoints.pop()
+    st.rerun()
 
 
-    st.markdown("### Configure Quadrotor Parameters")
 
-    config_keys = {
-        "thrust_disturbance": "Thrust Disturbance (N)",
-        "gyro_disturbance": "Gyro Disturbance (deg/s)"
-    }
-
-    # Ensure all expected keys are present in the config
-    for key, default_val in default_data.items():
-        if key not in config:
-            config[key] = default_val
-
-    # Input fields with values from session state
-    for key, label in config_keys.items():
-        config[key] = st.number_input(
-            label,
-            value=config.get(key, default_data[key]),
-            key=key
-        )
-
-    # Input for custom file name
-    custom_filename = st.text_input("Enter a custom file name (without extension):", "quadrotor_config")
-
-    # Download configuration button
-    config_json = json.dumps(config, indent=4)
-    st.download_button(
-        label="Download Configuration",
-        data=config_json,
-        file_name=f"{custom_filename}.json",
-        mime="application/json"
+# === Time Editor ===
+st.subheader("Segment Durations (T_legs)")
+for i in range(len(st.session_state.T_legs)):
+    st.session_state.T_legs[i] = st.number_input(
+        f"T_leg[{i}]", value=st.session_state.T_legs[i], step=0.1
     )
 
 
-     # Upload Trajectory CSV
-    st.markdown("### Upload Trajectory CSV")
-    trajectory_file = st.file_uploader("Choose a CSV file", type=["csv"], key="trajectory")
+# === Trajectory Controls: Generate + Sample ===
+col_traj, col_sample = st.columns([1, 1])
 
-    # Store trajectory data in session state
-    if trajectory_file is not None:
+with col_traj:
+    generate_traj = st.button("Generate Trajectory")
+
+with col_sample:
+    if st.button("Sample Trajectory"):
+        sample_pos = [
+            [0, 0, 0],
+            [7.04, -0.76, 0],
+            [10.04, 1.7, 0],
+            [10.22, 6.6, 0],
+            [13.33, 8.65, 0],
+            [20.15, 8.14, 0],
+            [19.6, -1.92, 0],
+        ]
+        sample_vel = [
+            [0, 0, 0],
+            [2.37, 0, 0],
+            [0.15, 2.67, 0],
+            [0.49, 2.28, 0],
+            [2.85, -0.23, 0],
+            [0, 0, 0],
+            [0, 0, 0],
+        ]
+        sample_T_legs = [4.67, 2.17, 1.84, 1.92, 5.5, 6.46]
+
+        st.session_state.waypoints = [
+            {"pos": [float(x) for x in p], "vel": [float(vv) for vv in v]}
+            for p, v in zip(sample_pos, sample_vel)
+        ]
+        st.session_state.T_legs = [float(t) for t in sample_T_legs]
+
+        st.rerun()
+
+
+
+
+
+# === Trajectory Generation ===
+if generate_traj:
+    try:
+        pos = [wp["pos"] for wp in st.session_state.waypoints]
+        vel = [wp["vel"] for wp in st.session_state.waypoints]
+        acc = [[0, 0, 0] for _ in range(len(pos))]
+        jerk = [[0, 0, 0] for _ in range(len(pos))]
+
+        bc = np.stack((pos, vel, acc, jerk))
+        cost = find_cost_function(
+            poly_deg=poly_deg,
+            min_deriv=min_deriv,
+            rows_free=[],
+            n_legs=len(pos) - 1,
+            bc_deriv=bc_deriv,
+        )
+
+        ref = planner2(
+            bc,
+            cost,
+            len(pos) - 1,
+            poly_deg,
+            k_time,
+            st.session_state.T_legs,
+        )
+
+        # Save in session
+        st.session_state.ref_traj = ref
+
+        # Plot and store figure — reduced size
+        fig = plt.figure(figsize=(3, 2.4))  # smaller figure
+        ax = fig.add_subplot(111, projection="3d")
+        ax.plot(ref["x"], ref["y"], ref["z"], "k-", label="Trajectory")
+        ax.scatter(*zip(*pos), c="r", label="Waypoints")
+        ax.set_xlabel("X")
+        ax.set_ylabel("Y")
+        ax.set_zlabel("Z")
+        ax.legend()
+        st.session_state.ref_fig = fig
+
+        # st.markdown("### Reference Trajectory")
+        # # st.pyplot(fig)
+        # plt.close(fig)
+
+        # # Trigger rerun to expose state for other blocks
+        # st.rerun()
+
+    except Exception as e:
+        st.exception(f"Trajectory generation failed: {e}")
+
+
+
+
+if "ref_fig" in st.session_state:
+    st.markdown("### Reference Trajectory")
+    col1, _ = st.columns([1, 1])  # half-width left column, empty right column
+    with col1:
+        st.pyplot(st.session_state.ref_fig)
+        plt.close(st.session_state.ref_fig)
+
+
+# === Flowpipe Generation ===
+st.subheader("Generate Flowpipe")
+
+thrust_d = st.number_input("Thrust Disturbance", value=2.0, step=0.1)
+gyro_d = st.number_input("Gyro Disturbance", value=2.4, step=0.1)
+
+if st.button("Generate Flowpipe"):
+    if st.session_state.ref_traj is None:
+        st.warning("Generate the trajectory first.")
+    else:
         try:
-            df_trajectory = pd.read_csv(trajectory_file)
-            st.session_state.trajectory_data = df_trajectory
-            st.success("Trajectory CSV uploaded successfully!")
-            st.dataframe(df_trajectory.head())  # Show a preview of the uploaded CSV
+            ref = st.session_state.ref_traj
+            config = {"thrust_disturbance": thrust_d, "gyro_disturbance": gyro_d}
+            _, _, _, _, sol, omega_bound = log_linearized.disturbance(config, ref)
+
+            # === Flowpipe XY
+            fig_xy, ax_xy = plt.subplots(figsize=(10,10))
+            fp_xy, nom_xy = flowpipes(
+                ref=ref,
+                step=1,
+                w1=thrust_d,
+                omegabound=omega_bound,
+                sol=sol,
+                axis="xy"
+            )
+            plot_flowpipes(nom_xy, fp_xy, ax_xy, axis="xy")
+
+            # === Flowpipe XZ
+            fig_xz, ax_xz = plt.subplots(figsize=(10, 10))
+            fp_xz, nom_xz = flowpipes(
+                ref=ref,
+                step=1,
+                w1=thrust_d,
+                omegabound=omega_bound,
+                sol=sol,
+                axis="xz"
+            )
+            plot_flowpipes(nom_xz, fp_xz, ax_xz, axis="xz")
+
+            # # === Reference Trajectory (from session state)
+            # if "ref_fig" in st.session_state:
+            #     st.markdown("### Reference Trajectory")
+            #     st.pyplot(st.session_state.ref_fig)
+            #     plt.close(st.session_state.ref_fig)
+
+            # === Display Flowpipes Side-by-Side
+            st.markdown("### Flowpipe Projections")
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+                st.markdown("**XY Plane**")
+                st.pyplot(fig_xy)
+                plt.close(fig_xy)
+
+            with col2:
+                st.markdown("**XZ Plane**")
+                st.pyplot(fig_xz)
+                plt.close(fig_xz)
+
+
         except Exception as e:
-            st.error(f"Failed to read CSV file: {e}")
+            st.exception(f"Flowpipe generation failed: {e}")
 
-
-# Analyze quadrotor in the second column
-with col2:
-    with stylable_container(
-        "green",
-        css_styles="""
-        button {
-            background-color: #3CB371;
-            color: black;
-            font-size: 24px;
-            padding: 20px 40px;
-            border-radius: 10px;
-            border: none;
-            width: 100%;
-            cursor: pointer;
-        }
-        button:hover {
-            background-color: #2E8B57;
-        }
-        """,
-    ):
-        analyze_button = st.button("Analyze Quadrotor", key="analyze_quadrotor")
-
-    def analyze_quadrotor(config):
-        # Replace with trajectory generation from CSV
-        ref = cp.sim.multirotor_plan.traj_3()
-
-        # # Create Plot 1: 
-        # # fig1, ax1 = plt.subplots(figsize=(6, 6), projection="3d")
-
-        # fig1 = plt.figure(figsize=(6,6))
-        # ax1 = fig1.add_subplot(111, projection="3d")
-
-        # cp.sim.multirotor_plan.plot_trajectory3D(ref, ax1)
-        # # cp.quadrotor.simple_turn.emi_disturbance(config, ax1)
-
-        # img_bytes1 = BytesIO()
-        # fig1.savefig(img_bytes1, format='png')
-        # img_bytes1.seek(0)
-
-        # Create Plot 2: Roll Over Analysis
-        fig2, ax2 = plt.subplots(figsize=(6, 6))
-        # inv_points, mu_total, points, points_theta, ebeta, omegabound, sol_LMI = cp.quadrotor.log_linearized.disturbance(config, ref)
-        inv_points, points_algebra, lower_bound, upper_bound, sol, omega_bound = cp.quadrotor.log_linearized.disturbance(config, ref)
-        # cp.quadrotor.log_linearized.plot2DInvSet(points, inv_points, ax2)
-        flowpipes_list, nominal_traj = cp.flowpipe.flowpipe.flowpipes(
-            ref=ref,             # your dict with keys 'x', 'y', 'z'
-            step=1,                # number of segments
-            w1=config['thrust_disturbance'],              # linear disturbance (scalar or vector)
-            omegabound = omega_bound,     # angular disturbance (scalar or vector)
-            sol=sol,             # output of SE23LMIs
-            axis='xy'            # 'xy' or 'xz'
-        )
-
-        cp.flowpipe.flowpipe.plot_flowpipes(nominal_traj, flowpipes_list, ax2, axis='xy')
-
-        img_bytes2 = BytesIO()
-        fig2.savefig(img_bytes2, format='png')
-        img_bytes2.seek(0)
-
-        # st.pyplot(fig1)
-        st.pyplot(fig2)
-
-        return img_bytes2
-
-    if analyze_button:
-        img_bytes2 = analyze_quadrotor(st.session_state.quadrotor_config)
-
-        st.download_button(
-            label="Download Plot 1: EMI Disturbance",
-            data=img_bytes2,
-            file_name="quadrotor_emi_dist.png",
-            mime="image/png"
-        )
-        st.download_button(
-            label="Download Plot 2: Roll Over",
-            data=img_bytes2,
-            file_name="quadrotor_roll_over.png",
-            mime="image/png"
-        )

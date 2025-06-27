@@ -104,7 +104,7 @@ class Model:
             x,
             v])
         self.x0 = { 
-            'x': 0.0,
+            'x': 2.0,
             'v': 0.0}
         self.x_index = { 
             'x': 0,

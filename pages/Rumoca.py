@@ -107,12 +107,27 @@ if st.session_state.modelica_path and selected_format:
         st.session_state.generated_path = output_py
         st.session_state.generated_code = result.stdout
         st.session_state.export_format = selected_format
-
-        # st.success(f"{selected_format} export successful!")
+        st.session_state.error_message = None  # Clear any previous errors
 
     except subprocess.CalledProcessError as e:
-        st.error("Export failed:")
-        st.code(f"Command: {' '.join(cmd)}\n\nSTDOUT:\n{e.stdout}\n\nSTDERR:\n{e.stderr}", language="bash")
+        st.session_state.generated_code = None
+        st.session_state.generated_path = None
+        st.session_state.error_message = {
+            "cmd": ' '.join(cmd),
+            "stdout": e.stdout,
+            "stderr": e.stderr
+        }
+
+    if st.session_state.get("error_message"):
+        st.error("Rumoca export failed!")
+        st.code(f"Command:\n{st.session_state.error_message['cmd']}", language="bash")
+        
+        with st.expander("STDOUT"):
+            st.code(st.session_state.error_message["stdout"] or "[no output]", language="bash")
+        
+        with st.expander("STDERR"):
+            st.code(st.session_state.error_message["stderr"] or "[no error]", language="bash")
+
 
 # Show generated code
 if st.session_state.generated_code:

@@ -12,7 +12,7 @@ equation
     der(theta) = (v/l)*tan(str); 
     m1.omega_ref = thr;
     a = 1;
-end Rover;
+end Rover
 
 model Motor
     parameter Real tau = 1.0;
