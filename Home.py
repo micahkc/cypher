@@ -1,23 +1,40 @@
 import streamlit as st
 
-# Set page configuration
-st.set_page_config(page_title="Home Page", layout="wide")
+st.set_page_config(page_title="CP Analyze", layout="wide")
+st.title("CP Analyze")
+st.markdown("""
+**CP Analyze** is a unified platform for analyzing cyber-physical systems through modeling, simulation, and mathematical analysis.
 
-# Title and Subheading
-st.title("CP_Reach:")
-st.subheader("Cyber-Physical Systems Reachability Analysis Tool")
+It integrates:
+- **Rumoca**: Translate Modelica models to other representations
+- **CP Reach**: Perform reachability analysis using Lyapunov and contraction-based methods
+- **CP Analyze Core**: Import FMUs, simulate dynamics, plot results, and run advanced verification
+""")
 
-# st.write("Please select a vehicle type below:")
+st.header("Modules")
 
-# Display image (URL or local)
-image_url = "images/logo.png"
-st.image(image_url)
+col1, col2, col3 = st.columns(3)
 
-# # Buttons for navigation
-# col1, col2 = st.columns(2)
-# with col1:
-#     if st.button("Quadrotor"):
-#         st.switch_page("Quadrotor")
-# with col2:
-#     if st.button("Rover"):
-#         st.switch_page("Rover")
+with col1:
+    st.image("images/cp_analyze.png", use_container_width=True)
+    st.subheader("CP Analyze Core")
+    st.markdown("""
+    Tools for analying cyber-physical systems including FMU import, simulation, plotting, and mathematical analysis.
+    """)
+
+with col2:
+    st.image("images/rumoca.png", use_container_width=True)
+    st.subheader("Rumoca")
+    st.markdown("""
+    A Modelica-to-target converter supporting **SymPy**, **CasADi**, and **JSON**.
+    """)
+
+with col3:
+    st.image("images/cp_reach.png", use_container_width=True)
+    st.subheader("CP Reach")
+    st.markdown("""
+    Reachability analysis engine using nonlinear control theory to bound what states a system may reach given various disturbances.
+    """)
+
+st.divider()
+st.markdown("© 2025 CP Analyze | Purdue University")

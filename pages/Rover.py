@@ -246,7 +246,8 @@ with col2:
     if analyze_button:
         plot_rover_and_points(st.session_state.rover_config)
 
-    if st.session_state.img_bytes1 and st.session_state.img_bytes2:
+    if st.session_state.img_bytes1:
+        st.image(st.session_state.img_bytes1, caption="Plot 1: EMI Disturbance", use_container_width=True)
         st.download_button(
             label="Download Plot 1: EMI Disturbance",
             data=st.session_state.img_bytes1,
@@ -254,6 +255,8 @@ with col2:
             mime="image/png"
         )
 
+    if st.session_state.img_bytes2:
+        st.image(st.session_state.img_bytes2, caption="Plot 2: Roll Over", use_container_width=True)
         st.download_button(
             label="Download Plot 2: Roll Over",
             data=st.session_state.img_bytes2,
