@@ -9,26 +9,26 @@ if "fmu_graph" not in st.session_state:
     st.session_state.fmu_graph = {
         "nodes": [
             {
-                "id": "Satellite",
-                "data": {"label": "Satellite"},
-                "position": {"x": 100, "y": 150}
+                "id": "1",
+                "data": {"label": "Node A"},
+                "position": {"x": 100, "y": 100}
             },
             {
-                "id": "Controller",
-                "data": {"label": "Controller"},
-                "position": {"x": 400, "y": 150}
+                "id": "2",
+                "data": {"label": "Node B"},
+                "position": {"x": 300, "y": 100}
             }
         ],
         "edges": [
             {
                 "id": "e1",
-                "source": "Satellite",
-                "target": "Controller",
-                "label": "v -> v_meas",
+                "source": "1",
+                "target": "2",
                 "animated": True
             }
         ]
     }
+
 
 st.subheader("🔧 FMU Block Diagram")
 

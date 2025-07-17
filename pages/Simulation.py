@@ -1,31 +1,34 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import tempfile
 import os
 import json
 from fmpy import read_model_description
-from pathlib import Path
-
+from components.reactflow_editor import reactflow_editor
+import hashlib
 
 st.set_page_config(page_title="FMU Block Diagram", layout="wide")
 st.title("📦 FMU Diagram + Simulation")
 
-# Temporary directory for FMU storage
+# Setup state
 fmu_dir = tempfile.mkdtemp()
-
-# Initialize session state
 if "fmu_meta" not in st.session_state:
     st.session_state.fmu_meta = {}
 if "fmu_graph" not in st.session_state:
     st.session_state.fmu_graph = {"nodes": [], "edges": []}
+if "graph_update_counter" not in st.session_state:
+    st.session_state.graph_update_counter = 0
 
-# Sidebar file uploader
+# File uploader
 st.sidebar.header("Upload FMUs")
 uploaded_files = st.sidebar.file_uploader("Select FMUs", type="fmu", accept_multiple_files=True)
 
-# Load and parse FMUs
+# Process FMUs
 if uploaded_files:
+    existing_ids = {node["id"] for node in st.session_state.fmu_graph["nodes"]}
     for file in uploaded_files:
+        if file.name in st.session_state.fmu_meta:
+            continue  # already processed
+
         file_path = os.path.join(fmu_dir, file.name)
         with open(file_path, "wb") as f:
             f.write(file.read())
@@ -35,66 +38,76 @@ if uploaded_files:
             inputs = [v.name for v in model_description.modelVariables if v.causality == "input"]
             outputs = [v.name for v in model_description.modelVariables if v.causality == "output"]
 
+            node_id = os.path.splitext(file.name)[0]
+            if node_id not in existing_ids:
+                st.session_state.fmu_graph["nodes"].append({
+                    "id": node_id,
+                    "data": {
+                        "label": node_id,
+                        "inputs": inputs,
+                        "outputs": outputs
+                    },
+                    "fmu_file": file.name,
+                    "position": {"x": 100 * len(st.session_state.fmu_graph["nodes"]), "y": 100}
+                })
+
+
             st.session_state.fmu_meta[file.name] = {
                 "inputs": inputs,
                 "outputs": outputs,
                 "modelIdentifier": model_description.modelExchange.modelIdentifier
             }
 
-            # Add node to graph
-            node_id = os.path.splitext(file.name)[0]
-            st.session_state.fmu_graph["nodes"].append({
-                "id": node_id,
-                "label": node_id,
-                "fmu_file": file.name,
-                "position": {"x": 100 * len(st.session_state.fmu_graph["nodes"]), "y": 100}
-            })
+            # Trigger graph refresh
+            st.session_state.graph_update_counter += 1
 
         except Exception as e:
             st.warning(f"Failed to read FMU '{file.name}': {e}")
 
-
-
-st.subheader("📊 FMU Block Diagram (ReactFlow View)")
+# Show diagram
+st.subheader("🧩 FMU Block Diagram")
 
 graph_data = st.session_state.fmu_graph
+graph_key = hashlib.md5(json.dumps(graph_data, sort_keys=True).encode()).hexdigest()
+unique_key = f"reactflow_fmu_{graph_key}_{st.session_state.graph_update_counter}"
 
-# Inject JSON into HTML file
-html_template = Path("static/fmu_diagram.html").read_text()
-html_with_graph = html_template.replace(
-    "window.initialGraph || { nodes: [], edges: [] }",
-    f"{{ nodes: {json.dumps(graph_data['nodes'])}, edges: {json.dumps(graph_data['edges'])} }}"
-)
+result = reactflow_editor(args=graph_data, key=unique_key)
+if result:
+    st.session_state.fmu_graph = result
 
-# Show the iframe
-components.html(html_with_graph, height=600, scrolling=False)
-
-
-# Display uploaded FMU metadata
+# Metadata
 if st.session_state.fmu_meta:
-    st.subheader("Uploaded FMUs")
+    st.subheader("📂 Uploaded FMUs")
     for fname, meta in st.session_state.fmu_meta.items():
         with st.expander(fname):
             st.json(meta)
 
-# Editable graph JSON
-st.subheader("FMU Diagram (JSON Editor)")
-st.markdown("Use this as a placeholder for block diagram editing.")
-
-# Editable graph JSON area
+# Editor
+st.subheader("📝 FMU Graph JSON Editor")
 graph_json = st.text_area(
-    "FMU Graph JSON", 
+    "Edit Graph JSON below (nodes + edges):",
     value=json.dumps(st.session_state.fmu_graph, indent=2),
-    height=300
+    height=300,
+    key="graph_editor_text"
 )
 
-# Update graph from editor
-try:
-    st.session_state.fmu_graph = json.loads(graph_json)
-except json.JSONDecodeError:
-    st.error("Invalid JSON format in FMU graph editor")
+if st.button("Refresh Display"):
+    try:
+        st.session_state.fmu_graph = json.loads(graph_json)
+        st.session_state.graph_update_counter += 1
+        st.rerun()
+        st.success("Graph updated from editor!")
+    except json.JSONDecodeError:
+        st.error("Invalid JSON format.")
 
-# Placeholder for simulation
-if st.button("Run Simulation"):
-    st.info("Simulation engine not yet implemented.")
+st.download_button(
+    label="Export Graph",
+    data=json.dumps(st.session_state.fmu_graph, indent=2),
+    file_name="fmu_graph.json",
+    mime="application/json"
+)
+
+# Placeholder
+if st.button("▶️ Run Simulation"):
+    st.info("Simulation not yet implemented.")
     st.json(st.session_state.fmu_graph)
