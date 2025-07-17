@@ -41,7 +41,7 @@ class Model:
         mix_r = dae.add('mix_r', 'parameter', 'tunable', dict(start = 10.0))
         mix_t = dae.add('mix_t', 'parameter', 'tunable', dict(start = 32.0))
         m = dae.add('m', 'parameter', 'tunable', dict(start = 1.0))
-        g = dae.add('g', 'parameter', 'tunable', dict(start = 9.81))
+        g = dae.add('g', 'parameter', 'tunable', dict(start = 9.82))
         J_x = dae.add('J_x', 'parameter', 'tunable', dict(start = 1.0))
         J_y = dae.add('J_y', 'parameter', 'tunable', dict(start = 1.0))
         J_z = dae.add('J_z', 'parameter', 'tunable', dict(start = 1.0))

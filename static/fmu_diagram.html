@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>FMU Diagram</title>
+    <style>
+      html, body, #root { margin: 0; height: 100%; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module">
+      import React from 'https://esm.sh/react';
+      import ReactDOM from 'https://esm.sh/react-dom';
+      import ReactFlow, { Background, Controls } from 'https://esm.sh/reactflow';
+      import 'https://esm.sh/reactflow/dist/style.css';
+
+      const graph = window.initialGraph || {
+        nodes: [],
+        edges: []
+      };
+
+      const root = document.getElementById('root');
+      ReactDOM.render(
+        React.createElement(() =>
+          React.createElement('div', { style: { width: '100%', height: '100%' } },
+            React.createElement(ReactFlow, {
+              nodes: graph.nodes,
+              edges: graph.edges,
+              fitView: true,
+              nodesDraggable: false,
+              elementsSelectable: false
+            }),
+            React.createElement(Background, { variant: 'dots' }),
+            React.createElement(Controls)
+          )
+        ),
+        root
+      );
+    </script>
+  </body>
+</html>

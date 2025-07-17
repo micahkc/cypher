@@ -32,7 +32,7 @@ end Quadrotor;
 model RigidBody6DOF
     // stevens and lewis pg 111
     parameter Real m = 1.0;
-    parameter Real g = 9.81;
+    parameter Real g = 9.82;
     parameter Real J_x = 1;
     parameter Real J_y = 1;
     parameter Real J_z = 1;
