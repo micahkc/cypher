@@ -54,41 +54,36 @@ class Model:
 
         # ============================================
         # Declare u
-        thr = sympy.symbols('thr')
-        str = sympy.symbols('str')
+        u = sympy.symbols('u')
         self.u = sympy.Matrix([
-            thr,
-            str])
+            u])
         self.u0 = { 
-            'thr': 0.0,
-            'str': 0.0}
+            'u': 0.0}
         self.u_index = { 
-            'thr': 0,
-            'str': 1}
+            'u': 0}
         self.u_index_rev = [ 
-            'thr',
-            'str']
+            'u']
         # ============================================
         # Declare p
+        m = sympy.symbols('m')
         l = sympy.symbols('l')
-        r = sympy.symbols('r')
-        m1_tau = sympy.symbols('m1_tau')
+        g = sympy.symbols('g')
         self.p = sympy.Matrix([
+            m,
             l,
-            r,
-            m1_tau])
+            g])
         self.p0 = { 
+            'm': 0.0,
             'l': 0.0,
-            'r': 0.0,
-            'm1_tau': 0.0}
+            'g': 0.0}
         self.p_index = { 
-            'l': 0,
-            'r': 1,
-            'm1_tau': 2}
+            'm': 0,
+            'l': 1,
+            'g': 2}
         self.p_index_rev = [ 
+            'm',
             'l',
-            'r',
-            'm1_tau']
+            'g']
         # ============================================
         # Declare c
         self.c = sympy.Matrix([])
@@ -103,57 +98,32 @@ class Model:
         self.cp_index_rev = [ ]
         # ============================================
         # Declare x
-        m1_omega = sympy.symbols('m1_omega')
-        x = sympy.symbols('x')
-        y = sympy.symbols('y')
         theta = sympy.symbols('theta')
+        omega = sympy.symbols('omega')
         self.x = sympy.Matrix([
-            m1_omega,
-            x,
-            y,
-            theta])
+            theta,
+            omega])
         self.x0 = { 
-            'm1_omega': 0.0,
-            'x': 0.0,
-            'y': 0.0,
-            'theta': 0.0}
+            'theta': 0.0,
+            'omega': 0.0}
         self.x_index = { 
-            'm1_omega': 0,
-            'x': 1,
-            'y': 2,
-            'theta': 3}
+            'theta': 0,
+            'omega': 1}
         self.x_index_rev = [ 
-            'm1_omega',
-            'x',
-            'y',
-            'theta']
+            'theta',
+            'omega']
         # ============================================
         # Declare m
-        a = sympy.symbols('a')
-        self.m = sympy.Matrix([
-            a])
-        self.m0 = { 
-            'a': 0.0}
-        self.m_index = { 
-            'a': 0}
-        self.m_index_rev = [ 
-            'a']
+        self.m = sympy.Matrix([])
+        self.m0 = { }
+        self.m_index = { }
+        self.m_index_rev = [ ]
         # ============================================
         # Declare y
-        v = sympy.symbols('v')
-        m1_omega_ref = sympy.symbols('m1_omega_ref')
-        self.y = sympy.Matrix([
-            v,
-            m1_omega_ref])
-        self.y0 = { 
-            'v': 0.0,
-            'm1_omega_ref': 0.0}
-        self.y_index = { 
-            'v': 0,
-            'm1_omega_ref': 1}
-        self.y_index_rev = [ 
-            'v',
-            'm1_omega_ref']
+        self.y = sympy.Matrix([])
+        self.y0 = { }
+        self.y_index = { }
+        self.y_index_rev = [ ]
         # ============================================
         # Declare z
         self.z = sympy.Matrix([])
@@ -164,21 +134,15 @@ class Model:
 
         # ============================================
         # Declare pre_x
-        pre_m1_omega = sympy.symbols('pre_m1_omega')
-        pre_x = sympy.symbols('pre_x')
-        pre_y = sympy.symbols('pre_y')
         pre_theta = sympy.symbols('pre_theta')
+        pre_omega = sympy.symbols('pre_omega')
         self.pre_x = sympy.Matrix([
-            pre_m1_omega,
-            pre_x,
-            pre_y,
-            pre_theta])
+            pre_theta,
+            pre_omega])
 
         # ============================================
         # Declare pre_m
-        pre_a = sympy.symbols('pre_a')
-        self.pre_m = sympy.Matrix([
-            pre_a])
+        self.pre_m = sympy.Matrix([])
 
         # ============================================
         # Declare pre_z
@@ -186,26 +150,32 @@ class Model:
 
         # ============================================
         # Declare x_dot
-        der_m1_omega = sympy.symbols('der_m1_omega')
-        der_x = sympy.symbols('der_x')
-        der_y = sympy.symbols('der_y')
         der_theta = sympy.symbols('der_theta')
+        der_omega = sympy.symbols('der_omega')
         self.x_dot = sympy.Matrix([
-            der_m1_omega,
-            der_x,
-            der_y,
-            der_theta])
+            der_theta,
+            der_omega])
 
         # ============================================
         # Define Continous Update Function: fx
         self.fx = sympy.Matrix([
-            v - ((r * m1_omega)),
-            der_x - ((v * cos(theta))),
-            der_y - ((v * sin(theta))),
-            der_theta - (((v / l) * tan(str))),
-            m1_omega_ref - (thr),
-            a - (1.0),
-            der_m1_omega - (((1.0 / m1_tau) * (m1_omega_ref - m1_omega)))])
+            der_theta - (omega),
+            der_omega - ((-(((g / l) * sin(theta))) + (u / (m * (l UNHANDLED OP: {
+    "Exp": {
+        "location": {
+            "end": 0,
+            "end_column": 0,
+            "end_line": 0,
+            "file_name": "",
+            "start": 0,
+            "start_column": 0,
+            "start_line": 0,
+        },
+        "text": "",
+        "token_number": 0,
+        "token_type": 0,
+    },
+} 2.0)))))])
         self.fx = flatten_piecewise_with_nested_matrices(self.fx)
 
         # ============================================

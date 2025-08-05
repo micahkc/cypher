@@ -4,9 +4,9 @@ import matplotlib.pyplot as plt
 from io import BytesIO
 import sys
 sys.path.append("../")
-from cp_reach.sim.multirotor_plan import planner2, find_cost_function
-from cp_reach.flowpipe.flowpipe import flowpipes, plot_flowpipes
-from cp_reach.quadrotor import log_linearized
+import cp_reach
+import cp_reach.quadrotor as quadrotor
+import cp_reach.utils as utils
 
 st.set_page_config(page_title="Trajectory & Flowpipe Planner", layout="wide")
 st.title("Interactive Trajectory + Flowpipe Generator")
@@ -125,7 +125,7 @@ if generate_traj:
         jerk = [[0, 0, 0] for _ in range(len(pos))]
 
         bc = np.stack((pos, vel, acc, jerk))
-        cost = find_cost_function(
+        cost = quadrotor.mission.find_cost_function(
             poly_deg=poly_deg,
             min_deriv=min_deriv,
             rows_free=[],
@@ -133,7 +133,7 @@ if generate_traj:
             bc_deriv=bc_deriv,
         )
 
-        ref = planner2(
+        ref = quadrotor.mission.plan_trajectory(
             bc,
             cost,
             len(pos) - 1,
@@ -190,31 +190,31 @@ if st.button("Generate Flowpipe"):
         try:
             ref = st.session_state.ref_traj
             config = {"thrust_disturbance": thrust_d, "gyro_disturbance": gyro_d}
-            _, _, _, _, sol, omega_bound = log_linearized.disturbance(config, ref)
+            ang_vel_points,lower_bound_omega,upper_bound_omega,omega_dist,dynamics_sol,inv_points,lower_bound,upper_bound,kinematics_sol = quadrotor.invariant_set.solve(thrust_d, gyro_d, ref)
 
             # === Flowpipe XY
             fig_xy, ax_xy = plt.subplots(figsize=(10,10))
-            fp_xy, nom_xy = flowpipes(
+            fp_xy, nom_xy = utils.plotting.flowpipes(
                 ref=ref,
                 step=1,
-                w1=thrust_d,
-                omegabound=omega_bound,
-                sol=sol,
+                accel_dist=thrust_d,
+                omega_dist=omega_dist,
+                sol=kinematics_sol,
                 axis="xy"
             )
-            plot_flowpipes(nom_xy, fp_xy, ax_xy, axis="xy")
+            utils.plotting.plot_flowpipes(nom_xy, fp_xy, ax_xy, axis="xy")
 
             # === Flowpipe XZ
             fig_xz, ax_xz = plt.subplots(figsize=(10, 10))
-            fp_xz, nom_xz = flowpipes(
+            fp_xz, nom_xz = utils.plotting.flowpipes(
                 ref=ref,
                 step=1,
-                w1=thrust_d,
-                omegabound=omega_bound,
-                sol=sol,
+                accel_dist=thrust_d,
+                omega_dist=omega_dist,
+                sol=kinematics_sol,
                 axis="xz"
             )
-            plot_flowpipes(nom_xz, fp_xz, ax_xz, axis="xz")
+            utils.plotting.plot_flowpipes(nom_xz, fp_xz, ax_xz, axis="xz")
 
             # # === Reference Trajectory (from session state)
             # if "ref_fig" in st.session_state:

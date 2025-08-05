@@ -73,9 +73,9 @@ class Model:
             c,
             m])
         self.p0 = { 
-            'k': 1.0,
-            'c': 1.0,
-            'm': 1.0}
+            'k': 0.0,
+            'c': 0.0,
+            'm': 0.0}
         self.p_index = { 
             'k': 0,
             'c': 1,
@@ -104,7 +104,7 @@ class Model:
             x,
             v])
         self.x0 = { 
-            'x': 2.0,
+            'x': 0.0,
             'v': 0.0}
         self.x_index = { 
             'x': 0,
