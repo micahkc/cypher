@@ -7,7 +7,7 @@ import sys
 import matplotlib.pyplot as plt
 import numpy as np
 import io
-# import os
+import os
 import traceback
 
 
@@ -37,6 +37,15 @@ for key in ["modelica_path", "generated_path", "export_format", "generated_code"
     if key not in st.session_state:
         st.session_state[key] = None
 
+HERE = Path(__file__).parent  # Points to web_interface/
+TEMPLATE_DIR = HERE / "resources"
+
+# export_formats = {
+#     "sympy": TEMPLATE_DIR / "sympy.jinja",
+#     "casadi": TEMPLATE_DIR / "casadi_dae.jinja",
+# }
+
+# template_path = export_formats[selected_format]
 # Export format options
 export_formats = {
     "SymPy": "resources/sympy.jinja",
@@ -89,16 +98,26 @@ with col1:
 # Export and code generation
 if st.session_state.modelica_path and selected_format:
     output_py = generated_dir / f"{st.session_state.modelica_path.stem}_{selected_format}.py"
-    template_path = Path(export_formats[selected_format]).resolve()
-    manifest_path = Path("../rumoca").resolve() / "Cargo.toml"
+    # template_path = Path(export_formats[selected_format]).resolve()
+    template_path = export_formats[selected_format]
 
+    project_root = os.path.dirname(os.path.abspath(__file__))
+    rumoca_path = os.path.join(project_root, "..", "..", "rumoca", "target/release/rumoca")
+    
+    # manifest_path = Path("../rumoca").resolve() / "Cargo.toml"
+
+    # cmd = [
+    #     "cargo", "run",
+    #     "--manifest-path", str(rumoca_path),
+    #     "--",
+    #     str(st.session_state.modelica_path),
+    #     "-t", str(template_path)
+    # ]
     cmd = [
-        "cargo", "run",
-        "--manifest-path", str(manifest_path),
-        "--",
+        str(rumoca_path),
         str(st.session_state.modelica_path),
         "-t", str(template_path)
-    ]
+    ]   
 
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)

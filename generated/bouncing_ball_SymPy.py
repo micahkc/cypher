@@ -66,8 +66,8 @@ class Model:
             e,
             h0])
         self.p0 = { 
-            'e': 0.8,
-            'h0': 1.0}
+            'e': 0.0,
+            'h0': 0.0}
         self.p_index = { 
             'e': 0,
             'h0': 1}
@@ -99,7 +99,7 @@ class Model:
             h,
             v])
         self.x0 = { 
-            'h': 5.0,
+            'h': 0.0,
             'v': 0.0}
         self.x_index = { 
             'h': 0,

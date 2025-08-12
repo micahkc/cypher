@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from io import BytesIO
 import sys
+import pandas as pd
 sys.path.append("../")
 import cp_reach
 import cp_reach.quadrotor as quadrotor
@@ -28,6 +29,9 @@ if "T_legs" not in st.session_state:
 if "ref_traj" not in st.session_state:
     st.session_state.ref_traj = None
 
+if "kin_sol" not in st.session_state:
+    st.session_state.kin_sol = None
+    
 # === Waypoint Editor ===
 
 # Always enforce T_legs = len(waypoints) - 1
@@ -119,6 +123,7 @@ with col_sample:
 # === Trajectory Generation ===
 if generate_traj:
     try:
+        st.session_state.reset_sol = True
         pos = [wp["pos"] for wp in st.session_state.waypoints]
         vel = [wp["vel"] for wp in st.session_state.waypoints]
         acc = [[0, 0, 0] for _ in range(len(pos))]
@@ -177,20 +182,69 @@ if "ref_fig" in st.session_state:
         plt.close(st.session_state.ref_fig)
 
 
-# === Flowpipe Generation ===
-st.subheader("Generate Flowpipe")
-
 thrust_d = st.number_input("Thrust Disturbance", value=2.0, step=0.1)
 gyro_d = st.number_input("Gyro Disturbance", value=2.4, step=0.1)
 
-if st.button("Generate Flowpipe"):
+# === Bound Error ====
+st.subheader("Compute Error Bounds")
+if st.button("Compute Error Bounds"):
     if st.session_state.ref_traj is None:
         st.warning("Generate the trajectory first.")
     else:
         try:
             ref = st.session_state.ref_traj
-            config = {"thrust_disturbance": thrust_d, "gyro_disturbance": gyro_d}
-            ang_vel_points,lower_bound_omega,upper_bound_omega,omega_dist,dynamics_sol,inv_points,lower_bound,upper_bound,kinematics_sol = quadrotor.invariant_set.solve(thrust_d, gyro_d, ref)
+            if st.session_state.reset_sol == True:
+                # Solve lmi
+                ang_vel_points,lower_bound_omega,upper_bound_omega,omega_dist,dynamics_sol,inv_points,lower_bound,upper_bound,kinematics_sol = quadrotor.invariant_set.solve(thrust_d, gyro_d, ref)
+                st.session_state.kin_sol = kinematics_sol
+                st.session_state.dyn_sol = dynamics_sol
+                st.session_state.reset_sol = False
+            else:
+                # Use the saved LMI
+                kin_sol = st.session_state.kin_sol
+                dyn_sol = st.session_state.dyn_sol
+                ang_vel_points,lower_bound_omega,upper_bound_omega,omega_dist,dynamics_sol,inv_points,lower_bound,upper_bound,kinematics_sol = quadrotor.invariant_set.solve(thrust_d, gyro_d, ref, dyn_sol, kin_sol)
+
+            # Labels and units
+            components_se3 = ['x', 'y', 'z', 'roll', 'pitch', 'yaw']
+            units_se3 = ['m', 'm', 'm', 'rad', 'rad', 'rad']
+
+            components_omega = ['ωx', 'ωy', 'ωz']
+            units_omega = ['rad/s'] * 3
+
+            # Combine data
+            components = components_se3 + components_omega
+            lower_bounds = np.concatenate([lower_bound, lower_bound_omega])
+            upper_bounds = np.concatenate([upper_bound, upper_bound_omega])
+            units = units_se3 + units_omega
+
+            # Build dataframe
+            df_all = pd.DataFrame({
+                "Component": components,
+                "Lower Bound": lower_bounds,
+                "Upper Bound": upper_bounds,
+                "Units": units
+            })
+
+            st.dataframe(df_all, use_container_width=True)
+
+        except Exception as e:
+            st.exception(f"Calculating error bound failed: {e}")
+
+
+# === Flowpipe Generation ===
+st.subheader("Generate Flowpipe")
+
+
+if st.button("Generate Flowpipe"):
+    if st.session_state.kin_sol is None:
+        st.warning("Calculate the error bound first.")
+    else:
+        try:
+            kin_sol = st.session_state.kin_sol
+            dyn_sol = st.session_state.dyn_sol
+            ref = st.session_state.ref_traj
+            ang_vel_points,lower_bound_omega,upper_bound_omega,omega_dist,dynamics_sol,inv_points,lower_bound,upper_bound,kinematics_sol = quadrotor.invariant_set.solve(thrust_d, gyro_d, ref, dyn_sol, kin_sol)
 
             # === Flowpipe XY
             fig_xy, ax_xy = plt.subplots(figsize=(10,10))

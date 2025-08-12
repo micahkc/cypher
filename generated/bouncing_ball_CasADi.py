@@ -31,8 +31,8 @@ class Model:
         # ============================================
         # Declare p
 
-        e = dae.add('e', 'parameter', 'tunable', dict(start = 0.8))
-        h0 = dae.add('h0', 'parameter', 'tunable', dict(start = 1.0))
+        e = dae.add('e', 'parameter', 'tunable', dict(start = 0.0))
+        h0 = dae.add('h0', 'parameter', 'tunable', dict(start = 0.0))
         # ============================================
         # Declare c# ============================================
         # Declare cp
@@ -40,7 +40,7 @@ class Model:
         # ============================================
         # Declare x
 
-        h = dae.add('h', dict(start = 5.0))
+        h = dae.add('h', dict(start = 0.0))
         v = dae.add('v', dict(start = 0.0))
         # ============================================
         # Declare m
