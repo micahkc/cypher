@@ -9,6 +9,11 @@ import cp_reach
 import cp_reach.quadrotor as quadrotor
 import cp_reach.utils as utils
 
+
+
+
+
+
 st.set_page_config(page_title="Trajectory & Flowpipe Planner", layout="wide")
 st.title("Interactive Trajectory + Flowpipe Generator")
 
@@ -31,6 +36,10 @@ if "ref_traj" not in st.session_state:
 
 if "kin_sol" not in st.session_state:
     st.session_state.kin_sol = None
+
+if "tracks" not in st.session_state:
+    st.session_state.tracks = []  # list of dicts: {"name", "x", "y", "z", "n"}
+
     
 # === Waypoint Editor ===
 
@@ -182,6 +191,7 @@ if "ref_fig" in st.session_state:
         plt.close(st.session_state.ref_fig)
 
 
+vel_d = st.number_input("Velocity Disturbance", value=1.0, step=0.1)
 thrust_d = st.number_input("Thrust Disturbance", value=2.0, step=0.1)
 gyro_d = st.number_input("Gyro Disturbance", value=2.4, step=0.1)
 
@@ -195,7 +205,7 @@ if st.button("Compute Error Bounds"):
             ref = st.session_state.ref_traj
             if st.session_state.reset_sol == True:
                 # Solve lmi
-                ang_vel_points,lower_bound_omega,upper_bound_omega,omega_dist,dynamics_sol,inv_points,lower_bound,upper_bound,kinematics_sol = quadrotor.invariant_set.solve(thrust_d, gyro_d, ref)
+                ang_vel_points,lower_bound_omega,upper_bound_omega,omega_dist,dynamics_sol,inv_points,lower_bound,upper_bound,kinematics_sol = quadrotor.invariant_set.solve(vel_d, thrust_d, gyro_d, ref)
                 st.session_state.kin_sol = kinematics_sol
                 st.session_state.dyn_sol = dynamics_sol
                 st.session_state.reset_sol = False
@@ -203,7 +213,7 @@ if st.button("Compute Error Bounds"):
                 # Use the saved LMI
                 kin_sol = st.session_state.kin_sol
                 dyn_sol = st.session_state.dyn_sol
-                ang_vel_points,lower_bound_omega,upper_bound_omega,omega_dist,dynamics_sol,inv_points,lower_bound,upper_bound,kinematics_sol = quadrotor.invariant_set.solve(thrust_d, gyro_d, ref, dyn_sol, kin_sol)
+                ang_vel_points,lower_bound_omega,upper_bound_omega,omega_dist,dynamics_sol,inv_points,lower_bound,upper_bound,kinematics_sol = quadrotor.invariant_set.solve(vel_d, thrust_d, gyro_d, ref, dyn_sol, kin_sol)
 
             # Labels and units
             components_se3 = ['x', 'y', 'z', 'roll', 'pitch', 'yaw']
@@ -231,6 +241,187 @@ if st.button("Compute Error Bounds"):
         except Exception as e:
             st.exception(f"Calculating error bound failed: {e}")
 
+# === Minimum Attack Search UI ===
+st.subheader("Search: Minimum Attack to Push Off Trajectory")
+
+left, right = st.columns([1, 1])
+
+with left:
+    st.markdown("**Count the norm along these axes as a violation:**")
+    chk_x = st.checkbox("X", value=True, key="atk_chk_x")
+    chk_y = st.checkbox("Y", value=True, key="atk_chk_y")
+    chk_z = st.checkbox("Z", value=True, key="atk_chk_z")
+
+with right:
+    st.markdown("**Attack Type**")
+    obj_axis = st.radio("Objective axis", ["Velocity", "Acceleration", "Angular Acceleration"], index=0, horizontal=True, key="atk_obj_axis")
+
+thresh_m = st.number_input("Deviation threshold (meters)", value=0.50, step=0.05, min_value=0.0)
+max_search = st.number_input("Max disturbance to search", value=10.0, step=0.5, min_value=0.1)
+tol_vel = 0.01
+max_iter = 30
+
+def selected_norms(pos_lo, pos_hi, chk_x, chk_y, chk_z, ord=2):
+    """
+    pos_lo, pos_hi: shape (3,) arrays for [x,y,z] lower/upper bounds
+    chk_*: booleans from the checkboxes
+    ord: norm order (2 = Euclidean, 1 = L1, np.inf = Linf, etc.)
+    """
+    mask = np.array([chk_x, chk_y, chk_z], dtype=bool)
+    if not mask.any():
+        return 0.0, 0.0, 0.0  # nothing selected
+
+    lo_sel = np.asarray(pos_lo)[mask]
+    hi_sel = np.asarray(pos_hi)[mask]
+
+    lo_norm = float(np.linalg.norm(lo_sel, ord=ord))
+    hi_norm = float(np.linalg.norm(hi_sel, ord=ord))
+
+    return lo_norm, hi_norm
+
+# Helper: evaluate bounds for a given vel disturbance (reuses cached LMI if available)
+def _eval_bounds(magnitude):
+    ref = st.session_state.ref_traj
+    if ref is None:
+        return None
+
+    if st.session_state["atk_obj_axis"] == "Velocity":
+        vel_d, thrust_d, gyro_d = magnitude, 0.0001, 0.0001
+
+    elif st.session_state["atk_obj_axis"] == "Acceleration":
+        vel_d, thrust_d, gyro_d = 0.0001, magnitude, 0.0001
+
+    elif st.session_state["atk_obj_axis"] == "Angular Acceleration":
+        vel_d, thrust_d, gyro_d = 0, 0, magnitude
+
+    # Reuse cached LMI solutions when possible
+    kin_sol = st.session_state.get("kin_sol", None)
+    dyn_sol = st.session_state.get("dyn_sol", None)
+    try:
+        (ang_vel_points, lower_bound_omega, upper_bound_omega, omega_dist,
+        dynamics_sol, inv_points, lower_bound, upper_bound, kinematics_sol) = \
+            quadrotor.invariant_set.solve(
+                vel_d, thrust_d, gyro_d, ref, dyn_sol, kin_sol
+            )
+        # Refresh cache (once we have them)
+        st.session_state.kin_sol = kinematics_sol
+        st.session_state.dyn_sol = dynamics_sol
+
+        # lower/upper for SE(3): [x,y,z, roll, pitch, yaw]
+        # we only use the position components here
+        pos_lo = lower_bound[:3]
+        pos_hi = upper_bound[:3]
+
+        lo_norm, hi_norm = selected_norms(
+            pos_lo, pos_hi,
+            chk_x=st.session_state["atk_chk_x"],
+            chk_y=st.session_state["atk_chk_y"],
+            chk_z=st.session_state["atk_chk_z"],
+            ord=2,  # Euclidean
+        )
+        return np.max([lo_norm, hi_norm])
+    
+    except Exception as e:
+        st.error(f"Evaluation failed: {e}")
+        return None
+
+# Predicate: does this vel disturbance violate the threshold?
+def _violates(dist_mag):
+    pos_error = _eval_bounds(dist_mag)
+    if pos_error is None:
+        return False
+    return pos_error >= thresh_m
+
+if st.button("Search minimum attack"):
+    if st.session_state.ref_traj is None:
+        st.warning("Generate the trajectory first.")
+    else:
+        # Exponential search to bracket a violation, then bisection
+        lo, hi = 0.0, max(0.1, min(max_search, 0.5))
+        # Grow 'hi' until violation or we hit max cap
+        while hi < max_search and not _violates(hi):
+            lo, hi = hi, min(2.0 * hi, max_search)
+
+        if not _violates(hi):
+            st.info("No violation found up to the maximum search bound.")
+        else:
+            # Bisection on vel disturbance magnitude
+            it = 0
+            while (hi - lo) > tol_vel and it < max_iter:
+                mid = 0.5 * (lo + hi)
+                if _violates(mid):
+                    hi = mid
+                else:
+                    lo = mid
+                it += 1
+
+            # Report the result and the achieved axis magnitudes at that vel disturbance
+            mag_star = hi
+            res_star = _eval_bounds(mag_star)
+            pos_abs = res_star
+
+            
+
+            if st.session_state["atk_obj_axis"] == "Velocity":
+                st.success(f"Minimum velocity disturbance that causes violation: {mag_star:.2f} m/s")
+
+            elif st.session_state["atk_obj_axis"] == "Acceleration":
+                st.success(f"Minimum acceleration disturbance that causes violation: {mag_star:.2f} m/s^2")
+
+            elif st.session_state["atk_obj_axis"] == "Angular Acceleration":
+                st.success(f"Minimum angular acceleration disturbance that causes violation: {mag_star:.2f} rad/s^2")
+
+
+
+# === CSV Upload =======
+st.subheader("Overlay CSV logs (x,y,z) on flowpipes")
+
+left_u, right_u = st.columns([3, 2])
+with left_u:
+    uploaded_files = st.file_uploader(
+        "Upload one or more CSV files",
+        type=["csv"],
+        accept_multiple_files=True
+    )
+
+col_load_a, col_load_b = st.columns([1, 1])
+if col_load_a.button("Add to overlays", help="Parse and cache the uploaded CSVs"):
+    new_tracks = []
+    for f in uploaded_files or []:
+        try:
+            df = pd.read_csv(f)
+            x_col = 'quad_low.position_w_p_w[1].1'
+            y_col = 'quad_low.position_w_p_w[2].1'
+            z_col = 'quad_low.position_w_p_w[3].1'
+
+            x = pd.to_numeric(df[x_col], errors="coerce").to_numpy()
+            y = pd.to_numeric(df[y_col], errors="coerce").to_numpy()
+            z = pd.to_numeric(df[z_col], errors="coerce").to_numpy()
+
+            new_tracks.append({
+                "name": f.name.rsplit(".", 1)[0],
+                "x": x, "y": y, "z": z,
+                "n": len(x),
+            })
+        except Exception as e:
+            st.error(f"Failed to load {getattr(f, 'name', '<unknown>')}: {e}")
+
+    if new_tracks:
+        st.session_state.tracks.extend(new_tracks)
+        st.success(f"Added {len(new_tracks)} overlay track(s).")
+
+if col_load_b.button("Clear overlays", type="secondary"):
+    st.session_state.tracks = []
+    st.info("Cleared all overlay tracks.")
+
+# Tiny summary table
+if st.session_state.tracks:
+    st.caption("Overlays:")
+    st.dataframe(
+        pd.DataFrame([{"File": t["name"], "Points": t["n"]} for t in st.session_state.tracks]),
+        use_container_width=True,
+        hide_index=True,
+    )
 
 # === Flowpipe Generation ===
 st.subheader("Generate Flowpipe")
@@ -244,13 +435,14 @@ if st.button("Generate Flowpipe"):
             kin_sol = st.session_state.kin_sol
             dyn_sol = st.session_state.dyn_sol
             ref = st.session_state.ref_traj
-            ang_vel_points,lower_bound_omega,upper_bound_omega,omega_dist,dynamics_sol,inv_points,lower_bound,upper_bound,kinematics_sol = quadrotor.invariant_set.solve(thrust_d, gyro_d, ref, dyn_sol, kin_sol)
+            ang_vel_points,lower_bound_omega,upper_bound_omega,omega_dist,dynamics_sol,inv_points,lower_bound,upper_bound,kinematics_sol = quadrotor.invariant_set.solve(vel_d, thrust_d, gyro_d, ref, dyn_sol, kin_sol)
 
             # === Flowpipe XY
             fig_xy, ax_xy = plt.subplots(figsize=(10,10))
             fp_xy, nom_xy = utils.plotting.flowpipes(
                 ref=ref,
                 step=1,
+                vel_dist = vel_d,
                 accel_dist=thrust_d,
                 omega_dist=omega_dist,
                 sol=kinematics_sol,
@@ -263,12 +455,49 @@ if st.button("Generate Flowpipe"):
             fp_xz, nom_xz = utils.plotting.flowpipes(
                 ref=ref,
                 step=1,
+                vel_dist = vel_d,
                 accel_dist=thrust_d,
                 omega_dist=omega_dist,
                 sol=kinematics_sol,
                 axis="xz"
             )
             utils.plotting.plot_flowpipes(nom_xz, fp_xz, ax_xz, axis="xz")
+
+
+
+            # Simulation overlay
+            # --- After utils.plotting.plot_flowpipes(...), overlay any tracks ---
+
+            tracks = st.session_state.get("tracks", [])
+
+            # XY overlay
+            for tr in tracks:
+                try:
+                    print(np.min(tr['x']), np.min(tr['y'][0]), np.min(tr['z'][0]))
+                    ax_xy.plot(tr["x"], tr["y"], label=tr["name"], linewidth=1.5, alpha=0.9)
+                except Exception as e:
+                    st.warning(f"Could not plot XY overlay for {tr['name']}: {e}")
+
+            # Keep legends tidy
+            handles_xy, labels_xy = ax_xy.get_legend_handles_labels()
+            if labels_xy:
+                ax_xy.legend(loc="best", fontsize=9)
+
+            # XZ overlay
+            for tr in tracks:
+                try:
+                    ax_xz.plot(tr["x"], tr["z"], label=tr["name"], linewidth=1.5, alpha=0.9)
+                except Exception as e:
+                    st.warning(f"Could not plot XZ overlay for {tr['name']}: {e}")
+
+            handles_xz, labels_xz = ax_xz.get_legend_handles_labels()
+            if labels_xz:
+                ax_xz.legend(loc="best", fontsize=9)
+
+
+
+
+
 
             # # === Reference Trajectory (from session state)
             # if "ref_fig" in st.session_state:
